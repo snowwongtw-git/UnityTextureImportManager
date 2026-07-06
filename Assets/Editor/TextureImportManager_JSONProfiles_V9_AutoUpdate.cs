@@ -6,13 +6,13 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class TAJsonTextureImportManagerV8 : EditorWindow
+public class TAJsonTextureImportManagerV9 : EditorWindow
 {
     private const string ProfileFolder = "Assets/Editor/TextureImportProfilesJson";
     private const string LastProfileKey = "TA_JSON_TextureImportManager_LastProfile";
     private const string ToolVersion = "v0.1.0";
     private const string UpdateUrl = "https://github.com/snowwongtw-git/UnityTextureImportManager/releases";
-    private const string LatestReleaseApiUrl = "https://api.github.com/repos/snowwongtw-git/UnityTextureImportManager/releases/latest";
+    private const string VersionJsonUrl = "https://raw.githubusercontent.com/snowwongtw-git/UnityTextureImportManager/main/version.json";
 
     public enum CompressorQuality
     {
@@ -116,10 +116,10 @@ public class TAJsonTextureImportManagerV8 : EditorWindow
     private int lastScannedCount;
     private int lastMatchedCount;
 
-    [MenuItem("Tools/TextureSetting/貼圖匯入管理器（V8）")]
+    [MenuItem("Tools/TextureSetting/貼圖匯入管理器（V9）")]
     public static void Open()
     {
-        TAJsonTextureImportManagerV8 window = GetWindow<TAJsonTextureImportManagerV8>("貼圖匯入管理器");
+        TAJsonTextureImportManagerV9 window = GetWindow<TAJsonTextureImportManagerV9>("貼圖匯入管理器");
         window.minSize = new Vector2(920, 680);
         window.Show();
     }
@@ -152,30 +152,28 @@ public class TAJsonTextureImportManagerV8 : EditorWindow
     }
 
     [Serializable]
-    private class GitHubReleaseInfo
+    private class GitHubVersionInfo
     {
-        public string tag_name;
-        public string html_url;
-        public string name;
-        public string body;
+        public string version;
+        public string downloadUrl;
+        public string message;
     }
 
     private void CheckForUpdates()
     {
-        EditorUtility.DisplayProgressBar("檢查更新", "正在連線到 GitHub Release...", 0.3f);
+        EditorUtility.DisplayProgressBar("檢查更新", "正在讀取 GitHub main 分支的 version.json...", 0.3f);
 
-        UnityWebRequest request = UnityWebRequest.Get(LatestReleaseApiUrl);
+        UnityWebRequest request = UnityWebRequest.Get(VersionJsonUrl);
         request.SetRequestHeader("User-Agent", "UnityTextureImportManager");
 
         UnityWebRequestAsyncOperation operation = request.SendWebRequest();
+        EditorApplication.update += WaitForVersionCheck;
 
-        EditorApplication.update += WaitForUpdateCheck;
-
-        void WaitForUpdateCheck()
+        void WaitForVersionCheck()
         {
             if (!operation.isDone) return;
 
-            EditorApplication.update -= WaitForUpdateCheck;
+            EditorApplication.update -= WaitForVersionCheck;
             EditorUtility.ClearProgressBar();
 
 #if UNITY_2020_2_OR_NEWER
@@ -188,43 +186,117 @@ public class TAJsonTextureImportManagerV8 : EditorWindow
             {
                 EditorUtility.DisplayDialog(
                     "檢查更新失敗",
-                    "無法讀取 GitHub Release。\n\n可能原因：\n1. Repository 還沒 Publish 到 GitHub。\n2. GitHub 還沒有建立 Release。\n3. 網路或公司防火牆阻擋。\n\n工具會改開 GitHub 頁面讓你手動確認。",
+                    "無法讀取 GitHub main 分支的 version.json。\n\n請確認 GitHub 專案根目錄有 version.json。\n\n工具會打開 GitHub 頁面讓你手動確認。",
                     "打開 GitHub");
-                Application.OpenURL(UpdateUrl);
+                Application.OpenURL("https://github.com/snowwongtw-git/UnityTextureImportManager");
                 request.Dispose();
                 return;
             }
 
-            GitHubReleaseInfo release = JsonUtility.FromJson<GitHubReleaseInfo>(request.downloadHandler.text);
+            GitHubVersionInfo info = JsonUtility.FromJson<GitHubVersionInfo>(request.downloadHandler.text);
             request.Dispose();
 
-            if (release == null || string.IsNullOrEmpty(release.tag_name))
+            if (info == null || string.IsNullOrEmpty(info.version))
             {
-                EditorUtility.DisplayDialog("檢查更新失敗", "GitHub 回傳資料格式不正確。", "OK");
+                EditorUtility.DisplayDialog("檢查更新失敗", "version.json 格式不正確，需要 version、downloadUrl、message。", "OK");
                 return;
             }
 
-            string latestVersion = NormalizeVersion(release.tag_name);
-            string currentVersion = NormalizeVersion(ToolVersion);
+            int compare = CompareVersion(NormalizeVersion(info.version), NormalizeVersion(ToolVersion));
 
-            if (latestVersion == currentVersion)
+            if (compare <= 0)
             {
-                EditorUtility.DisplayDialog(
-                    "已是最新版本",
-                    "目前版本：" + ToolVersion + "\n最新版本：" + release.tag_name,
-                    "OK");
+                EditorUtility.DisplayDialog("已是最新版本", "目前版本：" + ToolVersion + "\nGitHub 版本：" + info.version, "OK");
                 return;
             }
 
-            bool openRelease = EditorUtility.DisplayDialog(
+            bool download = EditorUtility.DisplayDialog(
                 "發現新版本",
-                "目前版本：" + ToolVersion + "\n最新版本：" + release.tag_name + "\n\n是否打開 GitHub Release 頁面下載新版？\n\n注意：Unity 不能安全地直接覆蓋正在編譯中的 Editor Script，建議手動下載或用 GitHub Desktop Pull 更新。",
-                "打開 Release",
-                "稍後再說");
+                "目前版本：" + ToolVersion + "\nGitHub 版本：" + info.version + "\n\n更新內容：\n" +
+                (string.IsNullOrEmpty(info.message) ? "未填寫" : info.message) +
+                "\n\n是否下載新版並覆蓋目前工具？\n\n工具會先備份舊檔，再覆蓋 .cs，Unity 會重新編譯。",
+                "下載更新",
+                "取消");
 
-            if (openRelease)
+            if (download)
             {
-                Application.OpenURL(string.IsNullOrEmpty(release.html_url) ? UpdateUrl : release.html_url);
+                DownloadAndReplaceTool(info.downloadUrl, info.version);
+            }
+        }
+    }
+
+    private void DownloadAndReplaceTool(string downloadUrl, string newVersion)
+    {
+        if (string.IsNullOrEmpty(downloadUrl))
+        {
+            EditorUtility.DisplayDialog("下載失敗", "version.json 沒有填 downloadUrl。", "OK");
+            return;
+        }
+
+        MonoScript script = MonoScript.FromScriptableObject(this);
+        string currentScriptPath = AssetDatabase.GetAssetPath(script);
+
+        if (string.IsNullOrEmpty(currentScriptPath))
+        {
+            EditorUtility.DisplayDialog("下載失敗", "找不到目前工具的 .cs 檔路徑。", "OK");
+            return;
+        }
+
+        EditorUtility.DisplayProgressBar("下載更新", "正在下載新版工具...", 0.5f);
+
+        UnityWebRequest request = UnityWebRequest.Get(downloadUrl);
+        request.SetRequestHeader("User-Agent", "UnityTextureImportManager");
+
+        UnityWebRequestAsyncOperation operation = request.SendWebRequest();
+        EditorApplication.update += WaitForDownload;
+
+        void WaitForDownload()
+        {
+            if (!operation.isDone) return;
+
+            EditorApplication.update -= WaitForDownload;
+            EditorUtility.ClearProgressBar();
+
+#if UNITY_2020_2_OR_NEWER
+            bool failed = request.result != UnityWebRequest.Result.Success;
+#else
+            bool failed = request.isNetworkError || request.isHttpError;
+#endif
+
+            if (failed)
+            {
+                EditorUtility.DisplayDialog("下載失敗", "無法下載新版 .cs，工具會打開 GitHub 頁面讓你手動下載。", "打開 GitHub");
+                Application.OpenURL("https://github.com/snowwongtw-git/UnityTextureImportManager");
+                request.Dispose();
+                return;
+            }
+
+            string newCode = request.downloadHandler.text;
+            request.Dispose();
+
+            if (string.IsNullOrEmpty(newCode) || !newCode.Contains("EditorWindow"))
+            {
+                EditorUtility.DisplayDialog("下載失敗", "下載內容不像 Unity Editor 工具 .cs，已取消覆蓋。", "OK");
+                return;
+            }
+
+            string fullPath = System.IO.Path.GetFullPath(currentScriptPath);
+            string backupPath = fullPath + ".bak_" + DateTime.Now.ToString("yyyyMMdd_HHmmss");
+
+            try
+            {
+                System.IO.File.Copy(fullPath, backupPath, true);
+                System.IO.File.WriteAllText(fullPath, newCode);
+                AssetDatabase.Refresh();
+
+                EditorUtility.DisplayDialog(
+                    "更新完成",
+                    "已更新到：" + newVersion + "\n\n舊檔已備份：\n" + backupPath + "\n\nUnity 會開始重新編譯。",
+                    "OK");
+            }
+            catch (Exception e)
+            {
+                EditorUtility.DisplayDialog("更新失敗", e.Message, "OK");
             }
         }
     }
@@ -238,6 +310,17 @@ public class TAJsonTextureImportManagerV8 : EditorWindow
             version = version.Substring(1);
         }
         return version;
+    }
+
+    private int CompareVersion(string a, string b)
+    {
+        Version va;
+        Version vb;
+
+        if (!Version.TryParse(a, out va)) va = new Version(0, 0, 0);
+        if (!Version.TryParse(b, out vb)) vb = new Version(0, 0, 0);
+
+        return va.CompareTo(vb);
     }
 
     private void DrawHeader()
