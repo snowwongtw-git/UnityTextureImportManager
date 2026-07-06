@@ -1,5 +1,4 @@
 {
-  "version": "v0.1.0",
-  "downloadUrl": "https://raw.githubusercontent.com/snowwongtw-git/UnityTextureImportManager/main/Assets/Editor/TextureImportManager_JSONProfiles_V9_AutoUpdate.cs",
-  "message": "目前為 v0.1.0 初版。之後更新版本時，請修改 version 與 message。"
+  "version": "v1.0.0",
+  "message": "正式版：JSON 設定檔、貼圖分類規則、預覽、套用、效能選項與 GitHub main 分支更新。"
 }

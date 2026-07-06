@@ -1,5 +1,11 @@
 {
-  "profileName":"Default",
-  "folderPath":"Assets",
-  "rules":[]
+  "profileName": "Default",
+  "folderPath": "Assets",
+  "includeSubFolders": true,
+  "caseInsensitive": true,
+  "onlyReimportMatched": true,
+  "showUnmatchedInPreview": false,
+  "skipReimportIfNoChanges": true,
+  "disableCrunchCompression": true,
+  "rules": []
 }

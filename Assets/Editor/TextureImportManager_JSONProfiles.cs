@@ -6,14 +6,14 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class TAJsonTextureImportManagerV11 : EditorWindow
+public class TextureImportManager_JSONProfiles : EditorWindow
 {
     private const string ProfileFolder = "Assets/Editor/TextureImportProfilesJson";
     private const string LastProfileKey = "TA_JSON_TextureImportManager_LastProfile";
-    private const string ToolVersion = "v0.1.0";
-    private const string RepositoryUrl = RepositoryUrl;
-    private const string RawRawVersionJsonUrl = "https://raw.githubusercontent.com/snowwongtw-git/UnityTextureImportManager/main/version.json";
-    private const string UpdateUrl = "https://github.com/snowwongtw-git/UnityTextureImportManager/releases";
+    private const string ToolVersion = "v1.0.0";
+    private const string RepositoryUrl = "https://github.com/snowwongtw-git/UnityTextureImportManager";
+    private const string VersionJsonUrl = "https://raw.githubusercontent.com/snowwongtw-git/UnityTextureImportManager/main/version.json";
+    private const string LatestScriptUrl = "https://raw.githubusercontent.com/snowwongtw-git/UnityTextureImportManager/main/Assets/Editor/TextureImportManager_JSONProfiles.cs";
 
     public enum CompressorQuality
     {
@@ -117,10 +117,10 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
     private int lastScannedCount;
     private int lastMatchedCount;
 
-    [MenuItem("Tools/TextureSetting/貼圖匯入管理器（V11）")]
+    [MenuItem("Tools/TextureSetting/貼圖匯入管理器")]
     public static void Open()
     {
-        TAJsonTextureImportManagerV11 window = GetWindow<TAJsonTextureImportManagerV11>("貼圖匯入管理器");
+        TextureImportManager_JSONProfiles window = GetWindow<TextureImportManager_JSONProfiles>("貼圖匯入管理器");
         window.minSize = new Vector2(920, 680);
         window.Show();
     }
@@ -156,15 +156,16 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
     private class GitHubVersionInfo
     {
         public string version;
-        public string downloadUrl;
         public string message;
     }
 
+    private string lastUpdateStatus = "尚未檢查更新";
+
     private void CheckForUpdates()
     {
-        EditorUtility.DisplayProgressBar("檢查更新", "正在讀取 GitHub main 分支的 version.json...", 0.3f);
+        EditorUtility.DisplayProgressBar("檢查更新", "正在讀取 GitHub main 分支的 version.json...", 0.35f);
 
-        UnityWebRequest request = UnityWebRequest.Get(RawVersionJsonUrl);
+        UnityWebRequest request = UnityWebRequest.Get(VersionJsonUrl);
         request.SetRequestHeader("User-Agent", "UnityTextureImportManager");
 
         UnityWebRequestAsyncOperation operation = request.SendWebRequest();
@@ -185,13 +186,20 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
             if (failed)
             {
-                bool open = EditorUtility.DisplayDialog(
-                    "檢查更新失敗",
-                    "無法讀取 GitHub main 分支的 version.json。\n\n常見原因：\n1. Repository 還是 Private，raw.githubusercontent.com 不能公開讀取。\n2. version.json 不在 GitHub 專案根目錄。\n3. 尚未 Commit / Push。\n4. 網路或公司防火牆阻擋。\n\n請先將 Repository 改成 Public，並確認這個網址能在瀏覽器直接打開：\n" + RawVersionJsonUrl,
-                    "打開 GitHub",
-                    "取消");
-                if (open) Application.OpenURL(RepositoryUrl);
+                lastUpdateStatus = "檢查失敗";
+                string error = request.error;
                 request.Dispose();
+
+                EditorUtility.DisplayDialog(
+                    "檢查更新失敗",
+                    "無法讀取 GitHub main 分支的 version.json。\n\n請確認：\n" +
+                    "1. Repository 是 Public。\n" +
+                    "2. GitHub 根目錄有 version.json。\n" +
+                    "3. version.json 已 Commit / Push。\n" +
+                    "4. 瀏覽器可直接打開：\n" + VersionJsonUrl +
+                    "\n\n錯誤訊息：\n" + error,
+                    "OK");
+                Repaint();
                 return;
             }
 
@@ -200,7 +208,12 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
             if (info == null || string.IsNullOrEmpty(info.version))
             {
-                EditorUtility.DisplayDialog("檢查更新失敗", "version.json 格式不正確，需要 version、downloadUrl、message。", "OK");
+                lastUpdateStatus = "version.json 格式錯誤";
+                EditorUtility.DisplayDialog(
+                    "檢查更新失敗",
+                    "version.json 格式不正確。\n\n正確格式：\n{\n  \"version\": \"v1.0.1\",\n  \"message\": \"更新內容\"\n}",
+                    "OK");
+                Repaint();
                 return;
             }
 
@@ -208,9 +221,16 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
             if (compare <= 0)
             {
-                EditorUtility.DisplayDialog("已是最新版本", "目前版本：" + ToolVersion + "\nGitHub 版本：" + info.version, "OK");
+                lastUpdateStatus = "已是最新版本";
+                EditorUtility.DisplayDialog(
+                    "已是最新版本",
+                    "目前版本：" + ToolVersion + "\nGitHub 版本：" + info.version,
+                    "OK");
+                Repaint();
                 return;
             }
+
+            lastUpdateStatus = "發現新版本：" + info.version;
 
             bool download = EditorUtility.DisplayDialog(
                 "發現新版本",
@@ -222,19 +242,15 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
             if (download)
             {
-                DownloadAndReplaceTool(info.downloadUrl, info.version);
+                DownloadAndReplaceTool(info.version);
             }
+
+            Repaint();
         }
     }
 
-    private void DownloadAndReplaceTool(string downloadUrl, string newVersion)
+    private void DownloadAndReplaceTool(string newVersion)
     {
-        if (string.IsNullOrEmpty(downloadUrl))
-        {
-            EditorUtility.DisplayDialog("下載失敗", "version.json 沒有填 downloadUrl。", "OK");
-            return;
-        }
-
         MonoScript script = MonoScript.FromScriptableObject(this);
         string currentScriptPath = AssetDatabase.GetAssetPath(script);
 
@@ -246,7 +262,7 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
         EditorUtility.DisplayProgressBar("下載更新", "正在下載新版工具...", 0.5f);
 
-        UnityWebRequest request = UnityWebRequest.Get(downloadUrl);
+        UnityWebRequest request = UnityWebRequest.Get(LatestScriptUrl);
         request.SetRequestHeader("User-Agent", "UnityTextureImportManager");
 
         UnityWebRequestAsyncOperation operation = request.SendWebRequest();
@@ -267,18 +283,23 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
             if (failed)
             {
-                EditorUtility.DisplayDialog("下載失敗", "無法下載新版 .cs，工具會打開 GitHub 頁面讓你手動下載。", "打開 GitHub");
-                Application.OpenURL(RepositoryUrl);
+                string error = request.error;
                 request.Dispose();
+
+                EditorUtility.DisplayDialog(
+                    "下載失敗",
+                    "無法下載新版 .cs。\n\n請確認 GitHub main 分支有：\nAssets/Editor/TextureImportManager_JSONProfiles.cs\n\n錯誤訊息：\n" + error,
+                    "打開 GitHub");
+                Application.OpenURL(RepositoryUrl);
                 return;
             }
 
             string newCode = request.downloadHandler.text;
             request.Dispose();
 
-            if (string.IsNullOrEmpty(newCode) || !newCode.Contains("EditorWindow"))
+            if (string.IsNullOrEmpty(newCode) || !newCode.Contains("EditorWindow") || !newCode.Contains("TextureImportManager_JSONProfiles"))
             {
-                EditorUtility.DisplayDialog("下載失敗", "下載內容不像 Unity Editor 工具 .cs，已取消覆蓋。", "OK");
+                EditorUtility.DisplayDialog("下載失敗", "下載內容不像本工具的 Unity Editor .cs，已取消覆蓋。", "OK");
                 return;
             }
 
@@ -338,12 +359,14 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
         }
         EditorGUILayout.EndHorizontal();
 
+        EditorGUILayout.LabelField("更新狀態：" + lastUpdateStatus);
+
         EditorGUILayout.HelpBox(
             "使用流程：\n" +
             "① 建立或載入設定檔\n" +
             "② 選擇貼圖資料夾\n" +
             "③ 新增分類規則，填寫檔名字尾，例如 _BaseColor / _MaterialMap / _Normal\n" +
-            "④ 先預覽符合規則的貼圖\n" +
+            "④ 先預覽將套用的貼圖\n" +
             "⑤ 確認無誤後再套用設定\n\n" +
             "設定檔位置：Assets/Editor/TextureImportProfilesJson。本工具不會修改 Unity Inspector 的 Mipmap Limit。檢查更新需要 GitHub Repository 是 Public。",
             MessageType.Info);
@@ -388,14 +411,14 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
         EditorGUILayout.EndHorizontal();
 
-        EditorGUILayout.LabelField("設定檔位置", string.IsNullOrEmpty(currentProfilePath) ? "(not saved)" : currentProfilePath);
+        EditorGUILayout.LabelField("設定檔位置", string.IsNullOrEmpty(currentProfilePath) ? "尚未儲存" : currentProfilePath);
 
         EditorGUILayout.BeginHorizontal();
         profileNameEdit = EditorGUILayout.TextField(L("Profile Name", "設定檔名稱"), profileNameEdit);
         if (GUILayout.Button("套用名稱", GUILayout.Width(150))) ApplyProfileName();
         EditorGUILayout.EndHorizontal();
 
-        EditorGUILayout.HelpBox("修改 Profile Name 後請按 Apply Name，工具會同步重新命名 JSON 檔。", MessageType.None);
+        EditorGUILayout.HelpBox("改名後請按「套用名稱」，工具會同步重新命名 JSON 檔。", MessageType.None);
 
         EditorGUILayout.EndVertical();
     }
@@ -441,7 +464,7 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
         if (GUILayout.Button("插入範例", GUILayout.Width(210)))
         {
-            if (EditorUtility.DisplayDialog("插入範例規則", "這只是範例，不代表你的專案規範。確定要插入 BaseColor / Emissive / MaterialMap / Normal？", "Insert", "Cancel"))
+            if (EditorUtility.DisplayDialog("插入範例規則", "這只是範例，不代表你的專案規範。確定要插入 BaseColor / Emissive / MaterialMap / Normal？", "插入", "取消"))
             {
                 if (profile.rules == null) profile.rules = new List<Rule>();
                 profile.rules.AddRange(CreateSampleRules());
@@ -458,7 +481,7 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
         if (profile.rules == null || profile.rules.Count == 0)
         {
-            EditorGUILayout.HelpBox("目前沒有規則。請按上方 + Add Rule 新增規則。\nMatching Suffix 是真正用來比對檔名的欄位，例如：_BaseColor、_MaterialMap、_Normal。", MessageType.Info);
+            EditorGUILayout.HelpBox("目前沒有分類規則。請按上方「+ 新增分類」。\n「檔名字尾」是真正用來比對檔名的欄位，例如：_BaseColor、_MaterialMap、_Normal。", MessageType.Info);
         }
         else
         {
@@ -510,8 +533,8 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
         EditorGUI.indentLevel++;
 
-        rule.displayName = EditorGUILayout.TextField(L("Display Name", "顯示名稱"), rule.displayName);
-        rule.matchingSuffix = EditorGUILayout.TextField(L("Matching Suffix", "匹配字尾"), rule.matchingSuffix);
+        rule.displayName = EditorGUILayout.TextField(L("Display Name", "分類名稱"), rule.displayName);
+        rule.matchingSuffix = EditorGUILayout.TextField(L("Matching Suffix", "檔名字尾"), rule.matchingSuffix);
 
         EditorGUILayout.Space(5);
         EditorGUILayout.LabelField("Unity 貼圖設定", EditorStyles.boldLabel);
@@ -674,13 +697,13 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
         string message =
             "即將套用貼圖匯入規則：\n\n" +
-            "Folder Path：\n" + profile.folderPath + "\n\n" +
+            "目標資料夾：\n" + profile.folderPath + "\n\n" +
             "掃描貼圖：" + scannedCount + " 張\n" +
             "符合規則的貼圖：" + matchedCount + " 張\n\n" +
-            "只有符合規則的貼圖會被修改，且啟用 Skip Reimport If No Changes 時，無變更貼圖會略過。\n\n" +
+            "只有符合規則的貼圖會被修改，且啟用 無變更不重新匯入 時，無變更貼圖會略過。\n\n" +
             "確定要套用嗎？";
 
-        return EditorUtility.DisplayDialog("確認套用", message, "Apply", "Cancel");
+        return EditorUtility.DisplayDialog("確認套用", message, "套用", "取消");
     }
 
     private void DrawBottomBar()
@@ -797,7 +820,7 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
 
                 if (i % 50 == 0)
                 {
-                    EditorUtility.DisplayProgressBar("Apply Rules（套用規則）", i + "/" + paths.Length + " " + Path.GetFileName(path), paths.Length == 0 ? 1f : (float)i / paths.Length);
+                    EditorUtility.DisplayProgressBar("套用規則", i + "/" + paths.Length + " " + Path.GetFileName(path), paths.Length == 0 ? 1f : (float)i / paths.Length);
                 }
 
                 Rule rule = FindMatchedRule(path);
@@ -1162,7 +1185,7 @@ public class TAJsonTextureImportManagerV11 : EditorWindow
     {
         if (string.IsNullOrEmpty(currentProfilePath)) return;
 
-        if (!EditorUtility.DisplayDialog("刪除 Profile", "確定刪除？\n" + currentProfilePath, "Delete", "Cancel")) return;
+        if (!EditorUtility.DisplayDialog("刪除 Profile", "確定刪除？\n" + currentProfilePath, "刪除", "取消")) return;
 
         string fullPath = ToFullPath(currentProfilePath);
         if (File.Exists(fullPath)) File.Delete(fullPath);

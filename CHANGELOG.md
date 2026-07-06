@@ -1,6 +1,8 @@
 # Changelog
 
-## V6
-- 中文化介面
+## v1.0.0
 - JSON Profile
-- 防呆機制
+- 貼圖分類規則
+- Preview / Apply
+- 效能選項
+- GitHub main branch 更新
