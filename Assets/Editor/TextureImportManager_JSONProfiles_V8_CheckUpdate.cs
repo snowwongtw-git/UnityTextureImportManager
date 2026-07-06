@@ -4,11 +4,15 @@ using System.Collections.Generic;
 using System.IO;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Networking;
 
-public class TAJsonTextureImportManagerV6 : EditorWindow
+public class TAJsonTextureImportManagerV8 : EditorWindow
 {
     private const string ProfileFolder = "Assets/Editor/TextureImportProfilesJson";
     private const string LastProfileKey = "TA_JSON_TextureImportManager_LastProfile";
+    private const string ToolVersion = "v0.1.0";
+    private const string UpdateUrl = "https://github.com/snowwongtw-git/UnityTextureImportManager/releases";
+    private const string LatestReleaseApiUrl = "https://api.github.com/repos/snowwongtw-git/UnityTextureImportManager/releases/latest";
 
     public enum CompressorQuality
     {
@@ -112,10 +116,10 @@ public class TAJsonTextureImportManagerV6 : EditorWindow
     private int lastScannedCount;
     private int lastMatchedCount;
 
-    [MenuItem("Tools/TextureSetting/貼圖匯入管理器（V6）")]
+    [MenuItem("Tools/TextureSetting/貼圖匯入管理器（V8）")]
     public static void Open()
     {
-        TAJsonTextureImportManagerV6 window = GetWindow<TAJsonTextureImportManagerV6>("貼圖匯入管理器");
+        TAJsonTextureImportManagerV8 window = GetWindow<TAJsonTextureImportManagerV8>("貼圖匯入管理器");
         window.minSize = new Vector2(920, 680);
         window.Show();
     }
@@ -147,10 +151,108 @@ public class TAJsonTextureImportManagerV6 : EditorWindow
         return new GUIContent(zh, tooltip ?? zh);
     }
 
+    [Serializable]
+    private class GitHubReleaseInfo
+    {
+        public string tag_name;
+        public string html_url;
+        public string name;
+        public string body;
+    }
+
+    private void CheckForUpdates()
+    {
+        EditorUtility.DisplayProgressBar("檢查更新", "正在連線到 GitHub Release...", 0.3f);
+
+        UnityWebRequest request = UnityWebRequest.Get(LatestReleaseApiUrl);
+        request.SetRequestHeader("User-Agent", "UnityTextureImportManager");
+
+        UnityWebRequestAsyncOperation operation = request.SendWebRequest();
+
+        EditorApplication.update += WaitForUpdateCheck;
+
+        void WaitForUpdateCheck()
+        {
+            if (!operation.isDone) return;
+
+            EditorApplication.update -= WaitForUpdateCheck;
+            EditorUtility.ClearProgressBar();
+
+#if UNITY_2020_2_OR_NEWER
+            bool failed = request.result != UnityWebRequest.Result.Success;
+#else
+            bool failed = request.isNetworkError || request.isHttpError;
+#endif
+
+            if (failed)
+            {
+                EditorUtility.DisplayDialog(
+                    "檢查更新失敗",
+                    "無法讀取 GitHub Release。\n\n可能原因：\n1. Repository 還沒 Publish 到 GitHub。\n2. GitHub 還沒有建立 Release。\n3. 網路或公司防火牆阻擋。\n\n工具會改開 GitHub 頁面讓你手動確認。",
+                    "打開 GitHub");
+                Application.OpenURL(UpdateUrl);
+                request.Dispose();
+                return;
+            }
+
+            GitHubReleaseInfo release = JsonUtility.FromJson<GitHubReleaseInfo>(request.downloadHandler.text);
+            request.Dispose();
+
+            if (release == null || string.IsNullOrEmpty(release.tag_name))
+            {
+                EditorUtility.DisplayDialog("檢查更新失敗", "GitHub 回傳資料格式不正確。", "OK");
+                return;
+            }
+
+            string latestVersion = NormalizeVersion(release.tag_name);
+            string currentVersion = NormalizeVersion(ToolVersion);
+
+            if (latestVersion == currentVersion)
+            {
+                EditorUtility.DisplayDialog(
+                    "已是最新版本",
+                    "目前版本：" + ToolVersion + "\n最新版本：" + release.tag_name,
+                    "OK");
+                return;
+            }
+
+            bool openRelease = EditorUtility.DisplayDialog(
+                "發現新版本",
+                "目前版本：" + ToolVersion + "\n最新版本：" + release.tag_name + "\n\n是否打開 GitHub Release 頁面下載新版？\n\n注意：Unity 不能安全地直接覆蓋正在編譯中的 Editor Script，建議手動下載或用 GitHub Desktop Pull 更新。",
+                "打開 Release",
+                "稍後再說");
+
+            if (openRelease)
+            {
+                Application.OpenURL(string.IsNullOrEmpty(release.html_url) ? UpdateUrl : release.html_url);
+            }
+        }
+    }
+
+    private string NormalizeVersion(string version)
+    {
+        if (string.IsNullOrEmpty(version)) return "";
+        version = version.Trim();
+        if (version.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+        {
+            version = version.Substring(1);
+        }
+        return version;
+    }
+
     private void DrawHeader()
     {
         EditorGUILayout.Space(8);
-        EditorGUILayout.LabelField("貼圖匯入管理器 V6", EditorStyles.boldLabel);
+
+        EditorGUILayout.BeginHorizontal();
+        EditorGUILayout.LabelField("貼圖匯入管理器 " + ToolVersion, EditorStyles.boldLabel);
+        GUILayout.FlexibleSpace();
+        if (GUILayout.Button("檢查更新", GUILayout.Width(100)))
+        {
+            CheckForUpdates();
+        }
+        EditorGUILayout.EndHorizontal();
+
         EditorGUILayout.HelpBox(
             "使用流程：\n" +
             "① 建立或載入設定檔\n" +
