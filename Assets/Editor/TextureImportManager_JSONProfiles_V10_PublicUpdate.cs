@@ -6,13 +6,14 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class TAJsonTextureImportManagerV9 : EditorWindow
+public class TAJsonTextureImportManagerV10 : EditorWindow
 {
     private const string ProfileFolder = "Assets/Editor/TextureImportProfilesJson";
     private const string LastProfileKey = "TA_JSON_TextureImportManager_LastProfile";
     private const string ToolVersion = "v0.1.0";
+    private const string RepositoryUrl = RepositoryUrl;
+    private const string RawRawVersionJsonUrl = "https://raw.githubusercontent.com/snowwongtw-git/UnityTextureImportManager/main/version.json";
     private const string UpdateUrl = "https://github.com/snowwongtw-git/UnityTextureImportManager/releases";
-    private const string VersionJsonUrl = "https://raw.githubusercontent.com/snowwongtw-git/UnityTextureImportManager/main/version.json";
 
     public enum CompressorQuality
     {
@@ -116,10 +117,10 @@ public class TAJsonTextureImportManagerV9 : EditorWindow
     private int lastScannedCount;
     private int lastMatchedCount;
 
-    [MenuItem("Tools/TextureSetting/貼圖匯入管理器（V9）")]
+    [MenuItem("Tools/TextureSetting/貼圖匯入管理器（V10）")]
     public static void Open()
     {
-        TAJsonTextureImportManagerV9 window = GetWindow<TAJsonTextureImportManagerV9>("貼圖匯入管理器");
+        TAJsonTextureImportManagerV10 window = GetWindow<TAJsonTextureImportManagerV10>("貼圖匯入管理器");
         window.minSize = new Vector2(920, 680);
         window.Show();
     }
@@ -163,7 +164,7 @@ public class TAJsonTextureImportManagerV9 : EditorWindow
     {
         EditorUtility.DisplayProgressBar("檢查更新", "正在讀取 GitHub main 分支的 version.json...", 0.3f);
 
-        UnityWebRequest request = UnityWebRequest.Get(VersionJsonUrl);
+        UnityWebRequest request = UnityWebRequest.Get(RawVersionJsonUrl);
         request.SetRequestHeader("User-Agent", "UnityTextureImportManager");
 
         UnityWebRequestAsyncOperation operation = request.SendWebRequest();
@@ -184,11 +185,12 @@ public class TAJsonTextureImportManagerV9 : EditorWindow
 
             if (failed)
             {
-                EditorUtility.DisplayDialog(
+                bool open = EditorUtility.DisplayDialog(
                     "檢查更新失敗",
-                    "無法讀取 GitHub main 分支的 version.json。\n\n請確認 GitHub 專案根目錄有 version.json。\n\n工具會打開 GitHub 頁面讓你手動確認。",
-                    "打開 GitHub");
-                Application.OpenURL("https://github.com/snowwongtw-git/UnityTextureImportManager");
+                    "無法讀取 GitHub main 分支的 version.json。\n\n常見原因：\n1. Repository 還是 Private，raw.githubusercontent.com 不能公開讀取。\n2. version.json 不在 GitHub 專案根目錄。\n3. 尚未 Commit / Push。\n4. 網路或公司防火牆阻擋。\n\n請先將 Repository 改成 Public，並確認這個網址能在瀏覽器直接打開：\n" + RawVersionJsonUrl,
+                    "打開 GitHub",
+                    "取消");
+                if (open) Application.OpenURL(RepositoryUrl);
                 request.Dispose();
                 return;
             }
@@ -266,7 +268,7 @@ public class TAJsonTextureImportManagerV9 : EditorWindow
             if (failed)
             {
                 EditorUtility.DisplayDialog("下載失敗", "無法下載新版 .cs，工具會打開 GitHub 頁面讓你手動下載。", "打開 GitHub");
-                Application.OpenURL("https://github.com/snowwongtw-git/UnityTextureImportManager");
+                Application.OpenURL(RepositoryUrl);
                 request.Dispose();
                 return;
             }
@@ -343,7 +345,7 @@ public class TAJsonTextureImportManagerV9 : EditorWindow
             "③ 新增分類規則，填寫檔名字尾，例如 _BaseColor / _MaterialMap / _Normal\n" +
             "④ 先預覽命中貼圖\n" +
             "⑤ 確認無誤後再套用設定\n\n" +
-            "設定檔位置：Assets/Editor/TextureImportProfilesJson。本工具不會修改 Unity Inspector 的 Mipmap Limit。",
+            "設定檔位置：Assets/Editor/TextureImportProfilesJson。本工具不會修改 Unity Inspector 的 Mipmap Limit。檢查更新需要 GitHub Repository 是 Public。",
             MessageType.Info);
     }
 
