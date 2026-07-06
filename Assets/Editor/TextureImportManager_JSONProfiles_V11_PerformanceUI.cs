@@ -6,7 +6,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Networking;
 
-public class TAJsonTextureImportManagerV10 : EditorWindow
+public class TAJsonTextureImportManagerV11 : EditorWindow
 {
     private const string ProfileFolder = "Assets/Editor/TextureImportProfilesJson";
     private const string LastProfileKey = "TA_JSON_TextureImportManager_LastProfile";
@@ -46,7 +46,7 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
         public bool onlyReimportMatched = true;
         public bool showUnmatchedInPreview = false;
         public bool skipReimportIfNoChanges = true;
-        public bool disableCrunchCompression = true;
+        public bool disableCrunchCompression = true; // 停用 Crunch 可加快大量貼圖重新匯入速度。
         public List<Rule> rules = new List<Rule>();
     }
 
@@ -117,10 +117,10 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
     private int lastScannedCount;
     private int lastMatchedCount;
 
-    [MenuItem("Tools/TextureSetting/貼圖匯入管理器（V10）")]
+    [MenuItem("Tools/TextureSetting/貼圖匯入管理器（V11）")]
     public static void Open()
     {
-        TAJsonTextureImportManagerV10 window = GetWindow<TAJsonTextureImportManagerV10>("貼圖匯入管理器");
+        TAJsonTextureImportManagerV11 window = GetWindow<TAJsonTextureImportManagerV11>("貼圖匯入管理器");
         window.minSize = new Vector2(920, 680);
         window.Show();
     }
@@ -343,7 +343,7 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
             "① 建立或載入設定檔\n" +
             "② 選擇貼圖資料夾\n" +
             "③ 新增分類規則，填寫檔名字尾，例如 _BaseColor / _MaterialMap / _Normal\n" +
-            "④ 先預覽命中貼圖\n" +
+            "④ 先預覽符合規則的貼圖\n" +
             "⑤ 確認無誤後再套用設定\n\n" +
             "設定檔位置：Assets/Editor/TextureImportProfilesJson。本工具不會修改 Unity Inspector 的 Mipmap Limit。檢查更新需要 GitHub Repository 是 Public。",
             MessageType.Info);
@@ -413,7 +413,7 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
 
         profile.includeSubFolders = EditorGUILayout.ToggleLeft(L("Include Sub Folders", "包含子資料夾"), profile.includeSubFolders);
         profile.caseInsensitive = EditorGUILayout.ToggleLeft(L("Case Insensitive", "忽略大小寫"), profile.caseInsensitive);
-        profile.onlyReimportMatched = EditorGUILayout.ToggleLeft(L("Only Reimport Matched", "僅重匯命中貼圖"), profile.onlyReimportMatched);
+        profile.onlyReimportMatched = EditorGUILayout.ToggleLeft(L("Only Reimport Matched", "僅重匯符合規則的貼圖"), profile.onlyReimportMatched);
 
         EditorGUILayout.HelpBox("掃描範圍只會限定在 Folder Path 指定資料夾內。Include Sub Folders 開啟才會包含子資料夾，不會掃描整個專案。", MessageType.None);
 
@@ -668,7 +668,7 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
     {
         if (matchedCount <= 0)
         {
-            EditorUtility.DisplayDialog("沒有命中貼圖", "目前沒有任何貼圖符合 Rule，不會套用任何設定。", "OK");
+            EditorUtility.DisplayDialog("沒有符合規則的貼圖", "目前沒有任何貼圖符合規則，不會套用任何設定。", "OK");
             return false;
         }
 
@@ -676,8 +676,8 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
             "即將套用貼圖匯入規則：\n\n" +
             "Folder Path：\n" + profile.folderPath + "\n\n" +
             "掃描貼圖：" + scannedCount + " 張\n" +
-            "命中貼圖：" + matchedCount + " 張\n\n" +
-            "只有命中的貼圖會被修改，且啟用 Skip Reimport If No Changes 時，無變更貼圖會略過。\n\n" +
+            "符合規則的貼圖：" + matchedCount + " 張\n\n" +
+            "只有符合規則的貼圖會被修改，且啟用 Skip Reimport If No Changes 時，無變更貼圖會略過。\n\n" +
             "確定要套用嗎？";
 
         return EditorUtility.DisplayDialog("確認套用", message, "Apply", "Cancel");
@@ -686,19 +686,34 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
     private void DrawBottomBar()
     {
         EditorGUILayout.BeginVertical("box");
-        profile.showUnmatchedInPreview = EditorGUILayout.ToggleLeft(L("Show Unmatched Files In Preview", "預覽中顯示未命中貼圖"), profile.showUnmatchedInPreview);
-        profile.skipReimportIfNoChanges = EditorGUILayout.ToggleLeft(L("Skip Reimport If No Changes", "無變更則略過重匯"), profile.skipReimportIfNoChanges);
-        profile.disableCrunchCompression = EditorGUILayout.ToggleLeft(L("Disable Crunch Compression", "關閉 Crunch 壓縮"), profile.disableCrunchCompression);
+
+        EditorGUILayout.LabelField("效能", EditorStyles.boldLabel);
+
+        profile.skipReimportIfNoChanges = EditorGUILayout.ToggleLeft(
+            "無變更不重新匯入",
+            profile.skipReimportIfNoChanges);
+
+        profile.disableCrunchCompression = EditorGUILayout.ToggleLeft(
+            "停用 Crunch（加快匯入）",
+            profile.disableCrunchCompression);
+
+        profile.onlyReimportMatched = EditorGUILayout.ToggleLeft(
+            "只處理符合規則的貼圖",
+            profile.onlyReimportMatched);
+
+        EditorGUILayout.HelpBox(
+            "建議保持三個選項開啟：可避免不必要的重新匯入，並減少 Crunch 壓縮造成的等待時間。",
+            MessageType.None);
 
         if (string.IsNullOrEmpty(currentProfilePath))
         {
-            EditorGUILayout.HelpBox("目前 Profile 尚未儲存。按 Save Profile 後會建立 JSON 檔。", MessageType.Warning);
+            EditorGUILayout.HelpBox("目前設定檔尚未儲存。按「儲存設定」後會建立 JSON 檔。", MessageType.Warning);
         }
 
         EditorGUILayout.BeginHorizontal();
-        if (GUILayout.Button("預覽命中貼圖", GUILayout.Height(34))) BuildPreview();
-        if (GUILayout.Button("套用設定到命中貼圖", GUILayout.Height(34))) ApplyRules();
-        if (GUILayout.Button("儲存設定", GUILayout.Height(34), GUILayout.Width(180))) SaveProfile();
+        if (GUILayout.Button("預覽將套用的貼圖", GUILayout.Height(34))) BuildPreview();
+        if (GUILayout.Button("套用設定", GUILayout.Height(34))) ApplyRules();
+        if (GUILayout.Button("儲存設定", GUILayout.Height(34), GUILayout.Width(120))) SaveProfile();
         EditorGUILayout.EndHorizontal();
 
         if (lastScannedCount > 0)
@@ -706,7 +721,7 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
             EditorGUILayout.Space(4);
             EditorGUILayout.LabelField("預覽結果", EditorStyles.boldLabel);
             EditorGUILayout.LabelField("掃描資料夾：" + profile.folderPath);
-            EditorGUILayout.LabelField("掃描：" + lastScannedCount + "    命中：" + lastMatchedCount + "    未命中：" + Mathf.Max(0, lastScannedCount - lastMatchedCount));
+            EditorGUILayout.LabelField("掃描：" + lastScannedCount + "    符合規則：" + lastMatchedCount + "    未符合：" + Mathf.Max(0, lastScannedCount - lastMatchedCount));
 
             previewScroll = EditorGUILayout.BeginScrollView(previewScroll, GUILayout.Height(150));
             foreach (PreviewItem item in previewItems)
@@ -736,7 +751,7 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
             {
                 if (i % 200 == 0)
                 {
-                    EditorUtility.DisplayProgressBar("預覽命中貼圖", "Scanning " + i + "/" + paths.Length, paths.Length == 0 ? 1f : (float)i / paths.Length);
+                    EditorUtility.DisplayProgressBar("預覽符合規則的貼圖", "Scanning " + i + "/" + paths.Length, paths.Length == 0 ? 1f : (float)i / paths.Length);
                 }
 
                 Rule rule = FindMatchedRule(paths[i]);
@@ -812,7 +827,7 @@ public class TAJsonTextureImportManagerV10 : EditorWindow
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
 
-        EditorUtility.DisplayDialog("完成", "掃描：" + paths.Length + "\n命中：" + matched + "\n重新匯入：" + reimported + "\n略過未變更：" + skipped, "OK");
+        EditorUtility.DisplayDialog("完成", "掃描：" + paths.Length + "\n符合規則：" + matched + "\n重新匯入：" + reimported + "\n略過未變更：" + skipped, "OK");
         BuildPreview();
     }
 
