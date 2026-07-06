@@ -4,9 +4,9 @@ Unity 貼圖匯入管理器。
 
 ## 安裝
 
-將 `Assets/Editor/TextureImportManager_JSONProfiles.cs` 放進 Unity 專案。
+將 `Assets/Editor/TextureImportManager_JSONProfiles.cs` 放進你使用的 Unity 專案的Assets/Editor資料夾內。
 
-工具位置：
+unity介面中，工具開啟位置：
 
 `Tools > TextureSetting > 貼圖匯入管理器`
 
@@ -20,11 +20,12 @@ Unity 貼圖匯入管理器。
 
 `https://raw.githubusercontent.com/snowwongtw-git/UnityTextureImportManager/main/Assets/Editor/TextureImportManager_JSONProfiles.cs`
 
-Repository 必須是 Public。
 
-## 更新流程
+## 使用流程
+① 建立或載入設定檔
+② 選擇貼圖資料夾
+③ 新增分類規則，填寫檔名字尾，例如 _BaseColor / _MaterialMap / _Normal
+④ 先預覽將套用的貼圖
+⑤ 確認無誤後再套用設定
 
-1. 修改 `Assets/Editor/TextureImportManager_JSONProfiles.cs`
-2. 修改 `version.json` 的 `version` 與 `message`
-3. Commit
-4. Push
+
