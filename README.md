@@ -24,7 +24,7 @@ Repository 必須是 Public。
 
 ## 更新流程
 
-1. 修改 `Assets/Editor/TextureImportManager_JSONProfiles.cs`
+1.下載並覆蓋這個檔案改 `Assets/Editor/TextureImportManager_JSONProfiles.cs`
 2. 修改 `version.json` 的 `version` 與 `message`
 3. Commit
 4. Push
